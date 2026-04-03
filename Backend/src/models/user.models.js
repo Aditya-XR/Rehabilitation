@@ -1,5 +1,8 @@
-import mongoose from 'mongoose';
-import bcrypt from 'bcryptjs';
+import mongoose from "mongoose";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import { env } from "../config/env.js";
+import { USER_ROLES } from "../constants/index.js";
 
 const userSchema = new mongoose.Schema(
   {
@@ -31,10 +34,19 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+    refreshToken: {
+      type: String,
+      default: null,
+    },
     role: {
       type: String,
-      enum: ['user', 'admin'],
-      default: 'user',
+      enum: Object.values(USER_ROLES),
+      default: USER_ROLES.USER,
     },
   },
   {
@@ -42,26 +54,31 @@ const userSchema = new mongoose.Schema(
   }
 );
 
+userSchema.index({ googleId: 1 }, { unique: true, sparse: true });
+
 /**
  * Pre-save middleware to hash password before saving to DB
  */
-userSchema.pre('save', async function (next) {
+userSchema.pre('save', async function () {
   // Only hash the password if it has been modified (or is new)
-  if (!this.isModified('password')) return next();
+  if (!this.isModified('password')) return;
 
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error) {
-    next(error);
+  if (!this.password) {
+    return;
   }
+
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
 });
 
 /**
  * Instance method to check if password is correct
  */
 userSchema.methods.comparePassword = async function (candidatePassword) {
+  if (!this.password) {
+    return false;
+  }
+
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
@@ -70,13 +87,14 @@ userSchema.methods.generateAccessToken = function(){
     return jwt.sign(
         //payload
         {
-            _id : this._id
+            _id : this._id,
+            role: this.role
         },
         //secret
-        process.env.ACCESS_TOKEN_SECRET,
+        env.auth.accessTokenSecret,
         //options
         {
-            expiresIn:process.env.ACCESS_TOKEN_EXPIRY || "1d"
+            expiresIn: env.auth.accessTokenExpiry
         }
     )
 }
@@ -88,13 +106,27 @@ userSchema.methods.generateRefreshToken = function(){
             _id : this._id
         },
         //secret
-        process.env.REFRESH_TOKEN_SECRET,
+        env.auth.refreshTokenSecret,
         //options
         {
-            expiresIn:process.env.REFRESH_TOKEN_EXPIRY || "1h"
+            expiresIn: env.auth.refreshTokenExpiry
         }
     )
 }
+
+userSchema.methods.toSafeObject = function () {
+  return {
+    _id: this._id,
+    name: this.name,
+    email: this.email,
+    googleId: this.googleId,
+    avatar: this.avatar,
+    role: this.role,
+    isActive: this.isActive,
+    createdAt: this.createdAt,
+    updatedAt: this.updatedAt,
+  };
+};
 
 const User = mongoose.model('User', userSchema);
 

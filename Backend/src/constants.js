@@ -1,1 +1,1 @@
-export const DB_NAME = "rehabilitation_db";
+export * from "./constants/index.js";

@@ -1,0 +1,20 @@
+# for deployment: Proxy Trust: If your app is behind a proxy (like Nginx, Heroku, or Cloudflare),
+ you must tell Express to trust the proxy, otherwise everyone will appear to have the same IP
+  address:
+app.set('trust proxy', 1);
+
+#feature
+  check are you able to store and display profile pic of user and admin
+
+
+##secutiry threat.
+  signup logic:
+  if someone already has an account created through Google login only
+  and another person knows that email address
+  that other person can call signup with that same email and a new password
+  the backend will attach that password to the existing account
+  then they can log in with email/password and access that user’s data
+$$fix: Modify the logic to prevent this takeover. Implement a flow where,
+  if an email exists without a password, we do NOT update the password immediately.
+  Instead, suggest a way to send a verification email or OTP to ensure the person 
+  making the request actually owns the email address.
