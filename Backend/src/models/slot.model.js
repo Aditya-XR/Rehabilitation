@@ -48,32 +48,23 @@ const slotSchema = new mongoose.Schema(
 slotSchema.index({ date: 1, startTime: 1, endTime: 1 }, { unique: true });
 slotSchema.index({ status: 1, startsAt: 1 });
 
-slotSchema.pre("validate", function (next) {
-    try {
-        if (!this.date || !this.startTime || !this.endTime) {
-            next();
-            return;
-        }
+slotSchema.pre("validate", function () {
+    if (!this.date || !this.startTime || !this.endTime) {
+        return;
+    }
 
-        if (!isValidTimeString(this.startTime) || !isValidTimeString(this.endTime)) {
-            next(new Error("Time must be in HH:mm format"));
-            return;
-        }
+    if (!isValidTimeString(this.startTime) || !isValidTimeString(this.endTime)) {
+        throw new Error("Time must be in HH:mm format");
+    }
 
-        const normalizedDate = new Date(this.date);
-        normalizedDate.setHours(0, 0, 0, 0);
-        this.date = normalizedDate;
-        this.startsAt = combineDateAndTime(normalizedDate, this.startTime);
-        this.endsAt = combineDateAndTime(normalizedDate, this.endTime);
+    const normalizedDate = new Date(this.date);
+    normalizedDate.setHours(0, 0, 0, 0);
+    this.date = normalizedDate;
+    this.startsAt = combineDateAndTime(normalizedDate, this.startTime);
+    this.endsAt = combineDateAndTime(normalizedDate, this.endTime);
 
-        if (this.endsAt <= this.startsAt) {
-            next(new Error("End time must be after start time"));
-            return;
-        }
-
-        next();
-    } catch (error) {
-        next(error);
+    if (this.endsAt <= this.startsAt) {
+        throw new Error("End time must be after start time");
     }
 });
 

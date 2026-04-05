@@ -33,9 +33,11 @@ import {
 
 const router = Router();
 
+//route protection: all routes below require authentication and admin role
 router.use(requireAuth, requireRole(USER_ROLES.ADMIN));
-
+//admin can get a list of all slots with optional filters and pagination
 router.get("/slots", validateRequest({ query: validateAdminSlotsQuery }), adminListSlots);
+//admin can create, update, and delete slots
 router.post("/slots", validateRequest({ body: validateCreateSlotBody }), adminCreateSlot);
 router.put(
     "/slots/:id",

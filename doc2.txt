@@ -1,0 +1,55 @@
+Admin ---- slots management
+      ---- booking management
+      ---- content management
+
+Admin Creation
+    The signup flow creates users with role "user" by default.
+    1->Signup a normal user
+    2->In MongoDB, manually change that user’s role to "admin"
+    3->Login again so the new role is included in the JWT
+
+Admin-route
+    1-> GET http://localhost:6000/api/v1/admin/slots
+    set Authorization -> Bearer Token -> accessToken
+    *suppots optonal filter:
+    example: http://localhost:6000/api/v1/admin/slots?status=available&dateFrom=2024-05-01&limit=5
+    New slot must be of "available" or "cancelled" status
+
+    2-> POST http://localhost:6000/api/v1/admin/slots
+    set Authorization -> Bearer Token -> accessToken
+    Body type: JSON
+    example:
+            {
+            "date": "2024-10-15",
+            "startTime": "10:00",
+            "endTime": "11:00",
+            "status": "available"
+            }
+    constrains:
+            date: Must be a valid date string (YYYY-MM-DD). 
+            startTime / endTime: Must be in HH:mm (24-hour) format. 
+            status (Optional): Can be available or cancelled. If omitted, it defaults to available
+    What You CAN Set:
+            date, startTime, endTime, status(either available (default) or cancelled)
+    What You CANNOT Set:
+            Past Dates: While the model doesn't strictly block past dates at the schema level, the public
+            "Available Slots" route (GET /slots/available) automatically filters out any slots where
+            startsAt is in the past.   
+            Cannot create duplicates; cannot start as confirmed.
+
+    3-> PUT http://localhost:6000/api/v1/admin/slots/id:
+    Authorization: Set to Bearer Token and paste your Admin accessToken.
+    Body type: JSON
+    example:
+            {
+            "startTime": "14:00",
+            "endTime": "15:00",
+            "status": "cancelled"
+            }
+    What You CAN Change:
+            *Admins can modify the following fields as long as the slot is currently in an editable state
+            (i.e., its status is available or cancelled):
+            *Date: You can move the appointment to a different day. The system will automatically recalculate
+            the internal startsAt and endsAt timestamps.
+            *Start & End Times: You can adjust the duration or specific timing (must be in HH:mm format).
+            *Status (Limited): You can manually toggle a slot between available and cancelled.

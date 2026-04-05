@@ -6,6 +6,15 @@ app.set('trust proxy', 1);
 #feature
   check are you able to store and display profile pic of user and admin
 
+#feature(ADMIN ADDITION)
+  The signup flow creates users with role "user" by default.
+  1->Signup a normal user
+  2->In MongoDB, manually change that user’s role to "admin"
+  3->Login again so the new role is included in the JWT
+
+#feature(filter on chacking the status of all existiong slots)
+  
+
 
 ##secutiry threat.
   signup logic:
@@ -18,3 +27,7 @@ $$fix: Modify the logic to prevent this takeover. Implement a flow where,
   if an email exists without a password, we do NOT update the password immediately.
   Instead, suggest a way to send a verification email or OTP to ensure the person 
   making the request actually owns the email address.
+
+
+  ##time-formate: "End time must be in HH:mm format and 24H system"
+  ##date-formate: YYYY-MM-DD
