@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { PAGINATION } from "../constants/index.js";
+import { PAGINATION } from "../constants.js";
 import { isValidTimeString } from "../utils/dateTime.js";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

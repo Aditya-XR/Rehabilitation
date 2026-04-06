@@ -14,7 +14,7 @@ import {
 import { requireAuth, requireRole } from "../middleware/auth.middleware.js";
 import { upload } from "../middleware/upload.middleware.js";
 import { validateRequest } from "../middleware/validate.middleware.js";
-import { USER_ROLES } from "../constants/index.js";
+import { USER_ROLES } from "../constants.js";
 import { validateObjectIdParam } from "../validations/common.validation.js";
 import {
     validateAdminBookingsQuery,

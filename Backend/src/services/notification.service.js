@@ -1,4 +1,4 @@
-import { BOOKING_STATUS } from "../constants/index.js";
+import { BOOKING_STATUS } from "../constants.js";
 import { formatDateTime } from "../utils/dateTime.js";
 import { sendMail } from "./email.service.js";
 

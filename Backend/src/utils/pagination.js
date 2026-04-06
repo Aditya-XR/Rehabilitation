@@ -1,4 +1,4 @@
-import { PAGINATION } from "../constants/index.js";
+import { PAGINATION } from "../constants.js";
 
 export const getPagination = (query = {}) => {
     const page = Math.max(Number(query.page) || PAGINATION.DEFAULT_PAGE, 1);

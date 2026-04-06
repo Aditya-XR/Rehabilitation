@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { CONTENT_TYPES } from "../constants/index.js";
+import { CONTENT_TYPES } from "../constants.js";
 
 const mediaSchema = new mongoose.Schema(
     {

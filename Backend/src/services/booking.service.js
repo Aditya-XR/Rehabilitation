@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import Booking from "../models/booking.model.js";
 import Slot from "../models/slot.model.js";
 import { ApiError } from "../utils/ApiError.js";
-import { BOOKING_STATUS, SLOT_STATUS } from "../constants/index.js";
+import { BOOKING_STATUS, SLOT_STATUS } from "../constants.js";
 import { buildPaginationMeta, getPagination } from "../utils/pagination.js";
 import { dispatchBookingStatusEmail } from "./notification.service.js";
 

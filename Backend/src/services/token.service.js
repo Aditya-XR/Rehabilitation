@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
-import { TOKEN_COOKIE_NAMES } from "../constants/index.js";
+import { TOKEN_COOKIE_NAMES } from "../constants.js";
 import { durationToMs } from "../utils/duration.js";
 import { getCookieOptions } from "../utils/cookieOptions.js";
 

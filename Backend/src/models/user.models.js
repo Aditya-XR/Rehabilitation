@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
-import { USER_ROLES } from "../constants/index.js";
+import { USER_ROLES } from "../constants.js";
 
 const userSchema = new mongoose.Schema(
   {

@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { SLOT_STATUS } from "../constants/index.js";
+import { SLOT_STATUS } from "../constants.js";
 import { combineDateAndTime, isValidTimeString } from "../utils/dateTime.js";
 
 const slotSchema = new mongoose.Schema(

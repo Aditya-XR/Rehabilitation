@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { BOOKING_STATUS } from "../constants/index.js";
+import { BOOKING_STATUS } from "../constants.js";
 
 const statusHistorySchema = new mongoose.Schema(
     {

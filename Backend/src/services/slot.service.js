@@ -1,6 +1,6 @@
 import Slot from "../models/slot.model.js";
 import Booking from "../models/booking.model.js";
-import { SLOT_STATUS } from "../constants/index.js";
+import { SLOT_STATUS } from "../constants.js";
 import { ApiError } from "../utils/ApiError.js";
 import { buildPaginationMeta, getPagination } from "../utils/pagination.js";
 

@@ -1,4 +1,4 @@
-import { SLOT_STATUS } from "../constants/index.js";
+import { SLOT_STATUS } from "../constants.js";
 import {
     addError,
     isValidDateValue,

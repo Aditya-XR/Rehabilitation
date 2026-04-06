@@ -53,3 +53,25 @@ Admin-route
             the internal startsAt and endsAt timestamps.
             *Start & End Times: You can adjust the duration or specific timing (must be in HH:mm format).
             *Status (Limited): You can manually toggle a slot between available and cancelled.
+    What  you CANNOT set:
+             * No changes allowed if status is pending or confirmed.    
+    
+
+    
+   4-> DELETE http://localhost:6000/api/v1/admin/slots/id
+    Authorization: Set to Bearer Token and paste your Admin accessToken.
+    Body type: None
+    example:
+            http://localhost:6000/api/v1/admin/slots/67f2b6d7c8e4a91234567890
+    What it does:
+            *Deletes a slot completely from the database.
+            *Used only when the slot is still unused and safe to remove.
+    What You CAN Delete:
+            *A slot whose current status is available or cancelled.
+            *A slot that has no booking history attached to it.
+    What You CANNOT Delete:
+            *A slot with status pending or confirmed.
+            *A slot that already has any booking record linked to it.
+    Expected Result:
+            *Success response with message "Slot deleted successfully".
+            *If not allowed, you may get 404 if slot does not exist or 409 if slot is in a protected state.

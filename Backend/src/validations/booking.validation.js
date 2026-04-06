@@ -1,4 +1,4 @@
-import { BOOKING_STATUS } from "../constants/index.js";
+import { BOOKING_STATUS } from "../constants.js";
 import {
     addError,
     isValidMongoId,
