@@ -45,6 +45,7 @@ export const env = {
     port: Number(process.env.PORT) || 6000,
     dbName: process.env.DB_NAME || "rehabilitation_db",
     mongoUri: process.env.MONGODB_URI,
+    frontendUrl: process.env.FRONTEND_URL || "",
     corsOrigins: parseOrigins(process.env.CORS_ORIGIN || process.env.CORS_ORIGINS),
     auth: {
         accessTokenSecret: process.env.ACCESS_TOKEN_SECRET,

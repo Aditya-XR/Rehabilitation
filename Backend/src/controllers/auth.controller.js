@@ -5,23 +5,36 @@ import {
     setAuthCookies,
 } from "../services/token.service.js";
 import {
+    changePassword as changePasswordService,
     createUserSession,
     getCurrentUserProfile,
+    forgotPassword as forgotPasswordService,
     loginUser,
     loginWithGoogle,
     logoutUser,
+    resetPassword as resetPasswordService,
     refreshUserSession,
     registerUser,
     updateProfile,
+    verifyEmail as verifyEmailService,
 } from "../services/auth.service.js";
+import {
+    dispatchPasswordResetEmail,
+    dispatchVerificationEmail,
+} from "../services/notification.service.js";
 
 export const signup = asyncHandler(async (req, res) => {
-    const user = await registerUser(req.body);
-    const session = await createUserSession(user);
+    const { user, verificationToken } = await registerUser(req.body);
 
-    setAuthCookies(res, session.tokens);
+    dispatchVerificationEmail(user.toSafeObject(), verificationToken);
 
-    res.status(201).json(new ApiResponse(201, { user: session.user }, "User registered successfully"));
+    res.status(201).json(
+        new ApiResponse(
+            201,
+            { user: user.toSafeObject() },
+            "User registered successfully. Please verify your email to log in."
+        )
+    );
 });
 
 export const login = asyncHandler(async (req, res) => {
@@ -71,4 +84,35 @@ export const patchProfile = asyncHandler(async (req, res) => {
     });
 
     res.status(200).json(new ApiResponse(200, { user }, "Profile updated successfully"));
+});
+
+export const verifyEmail = asyncHandler(async (req, res) => {
+    await verifyEmailService(req.body.token);
+
+    res.status(200).json(new ApiResponse(200, null, "Email verified successfully"));
+});
+
+export const forgotPassword = asyncHandler(async (req, res) => {
+    const { user, resetToken } = await forgotPasswordService(req.body.email);
+    dispatchPasswordResetEmail(user, resetToken);
+
+    res.status(200).json(
+        new ApiResponse(200, null, "If the account exists and supports password login, a reset email has been sent")
+    );
+});
+
+export const resetPassword = asyncHandler(async (req, res) => {
+    await resetPasswordService(req.params.token, req.body.newPassword);
+
+    res.status(200).json(new ApiResponse(200, null, "Password reset successfully"));
+});
+
+export const changePassword = asyncHandler(async (req, res) => {
+    await changePasswordService({
+        userId: req.user._id,
+        oldPassword: req.body.oldPassword,
+        newPassword: req.body.newPassword,
+    });
+
+    res.status(200).json(new ApiResponse(200, null, "Password changed successfully"));
 });

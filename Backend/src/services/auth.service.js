@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { OAuth2Client } from "google-auth-library";
 import User from "../models/user.models.js";
 import { env } from "../config/env.js";
@@ -6,6 +7,12 @@ import { issueTokensForUser, verifyRefreshToken } from "./token.service.js";
 import { uploadImage } from "./media.service.js";
 
 const googleClient = env.google.clientId ? new OAuth2Client(env.google.clientId) : null;
+const EMAIL_VERIFICATION_WINDOW_MS = 24 * 60 * 60 * 1000;
+const PASSWORD_RESET_WINDOW_MS = 15 * 60 * 1000;
+
+const generateRawToken = () => crypto.randomBytes(32).toString("hex");
+const hashToken = (token) => crypto.createHash("sha256").update(token).digest("hex");
+const getFutureDate = (durationMs) => new Date(Date.now() + durationMs);
 
 const getUserById = async (userId) => {
     const user = await User.findById(userId);
@@ -38,23 +45,26 @@ const getGooglePayload = async (idToken) => {
 
 export const registerUser = async ({ name, email, password }) => {
     const existingUser = await User.findOne({ email });
-    // If user exists and has a password, it means they registered with email/password before
-    if (existingUser && existingUser.password) {
+    if (existingUser) {
         throw new ApiError(409, "User with this email already exists");
     }
-    // If user exists but doesn't have a password, it means they registered with Google before. We can allow them to set a password now.
-    if (existingUser && !existingUser.password) {
-        existingUser.name = name || existingUser.name;
-        existingUser.password = password;
-        await existingUser.save();
-        return existingUser;
-    }
 
-    return User.create({
+    const rawVerificationToken = generateRawToken();
+    const hashedVerificationToken = hashToken(rawVerificationToken);
+
+    const user = await User.create({
         name,
         email,
         password,
+        isEmailVerified: false,
+        emailVerificationToken: hashedVerificationToken,
+        emailVerificationExpiry: getFutureDate(EMAIL_VERIFICATION_WINDOW_MS),
     });
+
+    return {
+        user,
+        verificationToken: rawVerificationToken,
+    };
 };
 
 export const loginUser = async ({ email, password }) => {
@@ -66,6 +76,10 @@ export const loginUser = async ({ email, password }) => {
 
     if (!user.password) {
         throw new ApiError(400, "This account uses Google sign-in. Please continue with Google.");
+    }
+
+    if (!user.isEmailVerified) {
+        throw new ApiError(403, "Please verify your email before logging in");
     }
 
     const isPasswordValid = await user.comparePassword(password);
@@ -88,11 +102,15 @@ export const loginWithGoogle = async ({ idToken }) => {
             email,
             googleId: payload.sub,
             avatar: payload.picture || "",
+            isEmailVerified: true,
         });
         return user;
     }
 
     user.googleId = payload.sub;
+    user.isEmailVerified = true;
+    user.emailVerificationToken = null;
+    user.emailVerificationExpiry = null;
     if (!user.avatar && payload.picture) {
         user.avatar = payload.picture;
     }
@@ -136,6 +154,89 @@ export const refreshUserSession = async (incomingRefreshToken) => {
         user: user.toSafeObject(),
         tokens,
     };
+};
+
+export const verifyEmail = async (token) => {
+    const hashedToken = hashToken(token);
+    const user = await User.findOne({
+        emailVerificationToken: hashedToken,
+        emailVerificationExpiry: { $gt: new Date() },
+    });
+
+    if (!user) {
+        throw new ApiError(400, "Invalid or expired email verification token");
+    }
+
+    user.isEmailVerified = true;
+    user.emailVerificationToken = null;
+    user.emailVerificationExpiry = null;
+    await user.save({ validateBeforeSave: false });
+
+    return user.toSafeObject();
+};
+
+export const forgotPassword = async (email) => {
+    const user = await User.findOne({ email }).select("+password");
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    if (!user.password) {
+        throw new ApiError(400, "Password reset is not available for Google-only accounts");
+    }
+
+    const rawResetToken = generateRawToken();
+    user.passwordResetToken = hashToken(rawResetToken);
+    user.passwordResetExpiry = getFutureDate(PASSWORD_RESET_WINDOW_MS);
+    await user.save({ validateBeforeSave: false });
+
+    return {
+        user: user.toSafeObject(),
+        resetToken: rawResetToken,
+    };
+};
+
+export const resetPassword = async (token, newPassword) => {
+    const hashedToken = hashToken(token);
+    const user = await User.findOne({
+        passwordResetToken: hashedToken,
+        passwordResetExpiry: { $gt: new Date() },
+    }).select("+password");
+
+    if (!user) {
+        throw new ApiError(400, "Invalid or expired password reset token");
+    }
+
+    user.password = newPassword;
+    user.passwordResetToken = null;
+    user.passwordResetExpiry = null;
+    await user.save();
+
+    return user.toSafeObject();
+};
+
+export const changePassword = async ({ userId, oldPassword, newPassword }) => {
+    const user = await User.findById(userId).select("+password");
+
+    if (!user || !user.isActive) {
+        throw new ApiError(401, "User account is not available");
+    }
+
+    if (!user.password) {
+        throw new ApiError(400, "Password change is not available for Google-only accounts");
+    }
+
+    const isPasswordValid = await user.comparePassword(oldPassword);
+
+    if (!isPasswordValid) {
+        throw new ApiError(401, "Current password is incorrect");
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    return user.toSafeObject();
 };
 
 export const logoutUser = async (userId) => {

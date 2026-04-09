@@ -34,6 +34,30 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    isEmailVerified: {
+      type: Boolean,
+      default: false,
+    },
+    emailVerificationToken: {
+      type: String,
+      default: null,
+      select: false,
+    },
+    emailVerificationExpiry: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+    passwordResetToken: {
+      type: String,
+      default: null,
+      select: false,
+    },
+    passwordResetExpiry: {
+      type: Date,
+      default: null,
+      select: false,
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -55,6 +79,8 @@ const userSchema = new mongoose.Schema(
 );
 
 userSchema.index({ googleId: 1 }, { unique: true, sparse: true });
+userSchema.index({ emailVerificationToken: 1 });
+userSchema.index({ passwordResetToken: 1 });
 
 /**
  * Pre-save middleware to hash password before saving to DB
@@ -122,6 +148,7 @@ userSchema.methods.toSafeObject = function () {
     googleId: this.googleId,
     avatar: this.avatar,
     role: this.role,
+    isEmailVerified: this.isEmailVerified,
     isActive: this.isActive,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
