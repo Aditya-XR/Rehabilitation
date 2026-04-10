@@ -20,19 +20,16 @@ import {
 } from "../services/auth.service.js";
 import {
     dispatchPasswordResetEmail,
-    dispatchVerificationEmail,
 } from "../services/notification.service.js";
 
 export const signup = asyncHandler(async (req, res) => {
-    const { user, verificationToken } = await registerUser(req.body);
-
-    dispatchVerificationEmail(user.toSafeObject(), verificationToken);
+    const { user } = await registerUser(req.body);
 
     res.status(201).json(
         new ApiResponse(
             201,
             { user: user.toSafeObject() },
-            "User registered successfully. Please verify your email to log in."
+            "User registered successfully."
         )
     );
 });

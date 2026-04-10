@@ -17,7 +17,7 @@ Production-oriented Express + MongoDB backend for a rehabilitation booking syste
 All routes are versioned under:
 
 ```txt
-http://localhost:6000/api/v1
+http://localhost:5000/api/v1
 ```
 
 ## Quick Setup
@@ -39,13 +39,13 @@ cp .env.example .env
 ### 3. Required environment variables
 
 ```env
-PORT=6000
+PORT=5000
 NODE_ENV=development
 DB_NAME=rehabilitation_db
 MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>/<database>
 FRONTEND_URL=http://localhost:3000
 
-CORS_ORIGIN=http://localhost:6000
+CORS_ORIGIN=http://localhost:3000
 COOKIE_DOMAIN=
 COOKIE_SECURE=false
 COOKIE_SAME_SITE=lax
@@ -79,7 +79,7 @@ Expected startup logs:
 
 ```txt
 MongoDB connected!!
-Server is running on port 6000
+Server is running on port 5000
 ```
 
 ## Authentication Notes

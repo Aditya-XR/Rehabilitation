@@ -49,21 +49,17 @@ export const registerUser = async ({ name, email, password }) => {
         throw new ApiError(409, "User with this email already exists");
     }
 
-    const rawVerificationToken = generateRawToken();
-    const hashedVerificationToken = hashToken(rawVerificationToken);
-
     const user = await User.create({
         name,
         email,
         password,
-        isEmailVerified: false,
-        emailVerificationToken: hashedVerificationToken,
-        emailVerificationExpiry: getFutureDate(EMAIL_VERIFICATION_WINDOW_MS),
+        isEmailVerified: true,
+        emailVerificationToken: null,
+        emailVerificationExpiry: null,
     });
 
     return {
         user,
-        verificationToken: rawVerificationToken,
     };
 };
 
@@ -76,10 +72,6 @@ export const loginUser = async ({ email, password }) => {
 
     if (!user.password) {
         throw new ApiError(400, "This account uses Google sign-in. Please continue with Google.");
-    }
-
-    if (!user.isEmailVerified) {
-        throw new ApiError(403, "Please verify your email before logging in");
     }
 
     const isPasswordValid = await user.comparePassword(password);

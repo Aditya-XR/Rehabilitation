@@ -9,13 +9,13 @@ Admin Creation
     3->Login again so the new role is included in the JWT
 
 Admin-route
-    1-> GET http://localhost:6000/api/v1/admin/slots
+    1-> GET http://localhost:5000/api/v1/admin/slots
     set Authorization -> Bearer Token -> accessToken
     *suppots optonal filter:
-    example: http://localhost:6000/api/v1/admin/slots?status=available&dateFrom=2024-05-01&limit=5
+    example: http://localhost:5000/api/v1/admin/slots?status=available&dateFrom=2024-05-01&limit=5
     New slot must be of "available" or "cancelled" status
 
-    2-> POST http://localhost:6000/api/v1/admin/slots
+    2-> POST http://localhost:5000/api/v1/admin/slots
     set Authorization -> Bearer Token -> accessToken
     Body type: JSON
     example:
@@ -37,7 +37,7 @@ Admin-route
             startsAt is in the past.   
             Cannot create duplicates; cannot start as confirmed.
 
-    3-> PUT http://localhost:6000/api/v1/admin/slots/id:
+    3-> PUT http://localhost:5000/api/v1/admin/slots/id:
     Authorization: Set to Bearer Token and paste your Admin accessToken.
     Body type: JSON
     example:
@@ -58,11 +58,11 @@ Admin-route
     
 
     
-   4-> DELETE http://localhost:6000/api/v1/admin/slots/id
+   4-> DELETE http://localhost:5000/api/v1/admin/slots/id
     Authorization: Set to Bearer Token and paste your Admin accessToken.
     Body type: None
     example:
-            http://localhost:6000/api/v1/admin/slots/67f2b6d7c8e4a91234567890
+            http://localhost:5000/api/v1/admin/slots/67f2b6d7c8e4a91234567890
     What it does:
             *Deletes a slot completely from the database.
             *Used only when the slot is still unused and safe to remove.
@@ -75,3 +75,6 @@ Admin-route
     Expected Result:
             *Success response with message "Slot deleted successfully".
             *If not allowed, you may get 404 if slot does not exist or 409 if slot is in a protected state.
+
+
+corepack pnpm dev
