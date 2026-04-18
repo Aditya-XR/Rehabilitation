@@ -1,13 +1,29 @@
 "use client"
 
 import NextImage from "next/image"
-import { useState, useRef } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { useCallback, useEffect, useRef, useState } from "react"
+import {
+  FileText,
+  ImageIcon,
+  Pencil,
+  Plus,
+  RefreshCcw,
+  Trash2,
+  Upload,
+} from "lucide-react"
+
+import { contentApi, type ApiContent, type ApiContactInfo } from "@/lib/api"
+import { CONTENT_TYPES, type ContentType } from "@/lib/constants"
+import {
+  contentTypeClasses,
+  getPrimaryContentImage,
+  hasContactInfo,
+} from "@/lib/dashboard"
+import { getRequestErrorMessage } from "@/lib/request"
+import { toast } from "@/hooks/use-toast"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
@@ -19,311 +35,522 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Plus, Upload, ImageIcon, FileText, Trash2 } from "lucide-react"
-import { CONTENT_TYPES, type ContentType } from "@/lib/constants"
+import { Spinner } from "@/components/ui/spinner"
+import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 
-interface ContentBlock {
-  id: string
+interface ContentFormState {
   key: string
   type: ContentType
   title: string
   body: string
-  imageUrl?: string
   isPublished: boolean
+  contactInfo: ApiContactInfo
 }
 
-// Mock data
-const initialContent: ContentBlock[] = [
-  {
-    id: "1",
-    key: "home-hero",
-    type: "hero",
-    title: "Find Your Inner Peace",
-    body: "Welcome to Serenity Center, where your journey to mindfulness and self-discovery begins. Our experienced practitioners guide you through meditation, intimacy coaching, and personal growth.",
-    imageUrl: "/placeholder.svg?height=200&width=400",
-    isPublished: true,
-  },
-  {
-    id: "2",
-    key: "about-section",
-    type: "section",
-    title: "Our Approach",
-    body: "We blend ancient wisdom with modern techniques to create a holistic healing experience. Each session is tailored to your unique needs and goals.",
-    isPublished: true,
-  },
-  {
-    id: "3",
-    key: "meditation-gallery",
-    type: "gallery",
-    title: "Our Meditation Spaces",
-    body: "Explore our tranquil environments designed for deep reflection and peaceful practice.",
-    imageUrl: "/placeholder.svg?height=200&width=400",
-    isPublished: false,
-  },
-  {
-    id: "4",
-    key: "services-intro",
-    type: "generic",
-    title: "Services We Offer",
-    body: "From guided meditation sessions to intimacy coaching for couples, we provide a range of services to support your personal growth journey.",
-    isPublished: true,
-  },
-]
-
-const typeColors: Record<ContentType, string> = {
-  hero: "bg-primary/10 text-primary border-primary/20",
-  section: "bg-accent/10 text-accent border-accent/20",
-  facility: "bg-sky-100 text-sky-700 border-sky-200",
-  gallery: "bg-amber-100 text-amber-700 border-amber-200",
-  contact: "bg-rose-100 text-rose-700 border-rose-200",
-  generic: "bg-secondary text-foreground border-border",
+const defaultFormState: ContentFormState = {
+  key: "",
+  type: CONTENT_TYPES.GENERIC,
+  title: "",
+  body: "",
+  isPublished: false,
+  contactInfo: {},
 }
+
+const sortContent = (items: ApiContent[]) =>
+  [...items].sort(
+    (left, right) =>
+      new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+  )
 
 export function CenterContentView() {
-  const [content, setContent] = useState<ContentBlock[]>(initialContent)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [dragActive, setDragActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [newContent, setNewContent] = useState<Omit<ContentBlock, "id">>({
-    key: "",
-    type: "generic",
-    title: "",
-    body: "",
-    imageUrl: "",
-    isPublished: false,
-  })
 
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true)
-    } else if (e.type === "dragleave") {
-      setDragActive(false)
+  const [content, setContent] = useState<ApiContent[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [editingContent, setEditingContent] = useState<ApiContent | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [replaceImages, setReplaceImages] = useState(false)
+  const [togglingContentId, setTogglingContentId] = useState<string | null>(null)
+  const [deletingContentId, setDeletingContentId] = useState<string | null>(null)
+  const [formState, setFormState] = useState<ContentFormState>(defaultFormState)
+
+  const loadContent = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      const response = await contentApi.listAdmin({ limit: 100 })
+      setContent(sortContent(response.items))
+      setError(null)
+    } catch (error) {
+      setError(getRequestErrorMessage(error, "Unable to load content blocks."))
+    } finally {
+      setIsLoading(false)
     }
+  }, [])
+
+  useEffect(() => {
+    void loadContent()
+  }, [loadContent])
+
+  const openCreateDialog = () => {
+    setEditingContent(null)
+    setSelectedFiles([])
+    setReplaceImages(false)
+    setFormState(defaultFormState)
+    setIsDialogOpen(true)
   }
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setDragActive(false)
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      // Mock file upload - in production, this would upload to Cloudinary
-      setNewContent({
-        ...newContent,
-        imageUrl: "/placeholder.svg?height=200&width=400",
-      })
-    }
+  const openEditDialog = (item: ApiContent) => {
+    setEditingContent(item)
+    setSelectedFiles([])
+    setReplaceImages(false)
+    setFormState({
+      key: item.key,
+      type: item.type,
+      title: item.title,
+      body: item.body,
+      isPublished: item.isPublished,
+      contactInfo: item.contactInfo || {},
+    })
+    setIsDialogOpen(true)
   }
 
-  const handleFileSelect = () => {
-    fileInputRef.current?.click()
+  const resetDialog = () => {
+    setEditingContent(null)
+    setSelectedFiles([])
+    setReplaceImages(false)
+    setFormState(defaultFormState)
+    setIsDialogOpen(false)
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      // Mock file upload
-      setNewContent({
-        ...newContent,
-        imageUrl: "/placeholder.svg?height=200&width=400",
-      })
-    }
+  const setContactField = (field: keyof ApiContactInfo, value: string) => {
+    setFormState((current) => ({
+      ...current,
+      contactInfo: {
+        ...current.contactInfo,
+        [field]: value,
+      },
+    }))
   }
 
-  const handleAddContent = () => {
-    if (newContent.key && newContent.title) {
-      const contentBlock: ContentBlock = {
-        id: String(Date.now()),
-        ...newContent,
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSelectedFiles(Array.from(event.target.files ?? []))
+  }
+
+  const handleSubmit = async () => {
+    try {
+      setIsSubmitting(true)
+
+      const payload = {
+        key: formState.key,
+        type: formState.type,
+        title: formState.title,
+        body: formState.body,
+        isPublished: formState.isPublished,
+        contactInfo: hasContactInfo(formState.contactInfo)
+          ? formState.contactInfo
+          : undefined,
+        images: selectedFiles,
       }
-      setContent([...content, contentBlock])
-      setNewContent({
-        key: "",
-        type: "generic",
-        title: "",
-        body: "",
-        imageUrl: "",
-        isPublished: false,
+
+      if (editingContent) {
+        const response = await contentApi.update(editingContent._id, {
+          ...payload,
+          replaceImages,
+        })
+        setContent((current) =>
+          sortContent(
+            current.map((item) =>
+              item._id === editingContent._id ? response.content : item,
+            ),
+          ),
+        )
+        toast({
+          title: "Content updated",
+          description: `${response.content.key} is now synced with the backend.`,
+        })
+      } else {
+        const response = await contentApi.create(payload)
+        setContent((current) => sortContent([...current, response.content]))
+        toast({
+          title: "Content created",
+          description: `${response.content.key} has been added successfully.`,
+        })
+      }
+
+      setError(null)
+      resetDialog()
+    } catch (error) {
+      toast({
+        title: "Save failed",
+        description: getRequestErrorMessage(error, "Unable to save this content block."),
+        variant: "destructive",
       })
-      setIsDialogOpen(false)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
-  const handleTogglePublish = (id: string) => {
-    setContent(
-      content.map((c) =>
-        c.id === id ? { ...c, isPublished: !c.isPublished } : c
+  const handleTogglePublish = async (item: ApiContent, checked: boolean) => {
+    try {
+      setTogglingContentId(item._id)
+      const response = await contentApi.update(item._id, { isPublished: checked })
+      setContent((current) =>
+        sortContent(
+          current.map((entry) =>
+            entry._id === item._id ? response.content : entry,
+          ),
+        ),
       )
-    )
+      toast({
+        title: checked ? "Content published" : "Content moved to draft",
+        description: `${item.key} was updated successfully.`,
+      })
+    } catch (error) {
+      toast({
+        title: "Publish update failed",
+        description: getRequestErrorMessage(error, "Unable to update publish status."),
+        variant: "destructive",
+      })
+    } finally {
+      setTogglingContentId(null)
+    }
   }
 
-  const handleDelete = (id: string) => {
-    setContent(content.filter((c) => c.id !== id))
+  const handleDelete = async (item: ApiContent) => {
+    if (!window.confirm(`Delete content block "${item.key}"?`)) {
+      return
+    }
+
+    try {
+      setDeletingContentId(item._id)
+      await contentApi.remove(item._id)
+      setContent((current) => current.filter((entry) => entry._id !== item._id))
+      toast({
+        title: "Content deleted",
+        description: `${item.key} was removed successfully.`,
+      })
+    } catch (error) {
+      toast({
+        title: "Delete failed",
+        description: getRequestErrorMessage(error, "Unable to delete this content block."),
+        variant: "destructive",
+      })
+    } finally {
+      setDeletingContentId(null)
+    }
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-serif font-semibold text-foreground tracking-wide">
             Center Content
           </h2>
           <p className="text-muted-foreground mt-1">
-            Manage website content blocks and media
+            Manage published content and media blocks shown throughout the user portal
           </p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2">
-              <Plus className="w-4 h-4" />
-              Add Content
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="font-serif text-foreground">Add Content Block</DialogTitle>
-              <DialogDescription>
-                Create a new content block for the website
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => void loadContent()}>
+            <RefreshCcw className="w-4 h-4" />
+            Refresh
+          </Button>
+          <Dialog
+            open={isDialogOpen}
+            onOpenChange={(open) => {
+              if (!open) {
+                resetDialog()
+                return
+              }
+
+              setIsDialogOpen(true)
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button
+                className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
+                onClick={openCreateDialog}
+              >
+                <Plus className="w-4 h-4" />
+                Add Content
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="font-serif text-foreground">
+                  {editingContent ? "Edit Content Block" : "Add Content Block"}
+                </DialogTitle>
+                <DialogDescription>
+                  Create or update published content using the backend content API.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="content-key" className="text-foreground">
+                      Key
+                    </Label>
+                    <Input
+                      id="content-key"
+                      placeholder="home-hero"
+                      value={formState.key}
+                      onChange={(event) =>
+                        setFormState((current) => ({
+                          ...current,
+                          key: event.target.value,
+                        }))
+                      }
+                      className="bg-card border-border"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="content-type" className="text-foreground">
+                      Type
+                    </Label>
+                    <Select
+                      value={formState.type}
+                      onValueChange={(value) =>
+                        setFormState((current) => ({
+                          ...current,
+                          type: value as ContentType,
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="bg-card border-border">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={CONTENT_TYPES.HERO}>Hero</SelectItem>
+                        <SelectItem value={CONTENT_TYPES.SECTION}>Section</SelectItem>
+                        <SelectItem value={CONTENT_TYPES.FACILITY}>Facility</SelectItem>
+                        <SelectItem value={CONTENT_TYPES.GALLERY}>Gallery</SelectItem>
+                        <SelectItem value={CONTENT_TYPES.CONTACT}>Contact</SelectItem>
+                        <SelectItem value={CONTENT_TYPES.GENERIC}>Generic</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="content-key" className="text-foreground">Key</Label>
+                  <Label htmlFor="content-title" className="text-foreground">
+                    Title
+                  </Label>
                   <Input
-                    id="content-key"
-                    placeholder="e.g., home-hero"
-                    value={newContent.key}
-                    onChange={(e) => setNewContent({ ...newContent, key: e.target.value })}
+                    id="content-title"
+                    placeholder="Optional section title"
+                    value={formState.title}
+                    onChange={(event) =>
+                      setFormState((current) => ({
+                        ...current,
+                        title: event.target.value,
+                      }))
+                    }
                     className="bg-card border-border"
                   />
                 </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="content-type" className="text-foreground">Type</Label>
-                  <Select
-                    value={newContent.type}
-                    onValueChange={(value) => setNewContent({ ...newContent, type: value as ContentType })}
-                  >
-                    <SelectTrigger className="bg-card border-border">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={CONTENT_TYPES.HERO}>Hero</SelectItem>
-                      <SelectItem value={CONTENT_TYPES.SECTION}>Section</SelectItem>
-                      <SelectItem value={CONTENT_TYPES.GALLERY}>Gallery</SelectItem>
-                      <SelectItem value={CONTENT_TYPES.GENERIC}>Generic</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="content-title" className="text-foreground">Title</Label>
-                <Input
-                  id="content-title"
-                  placeholder="Content title"
-                  value={newContent.title}
-                  onChange={(e) => setNewContent({ ...newContent, title: e.target.value })}
-                  className="bg-card border-border"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="content-body" className="text-foreground">Body</Label>
-                <Textarea
-                  id="content-body"
-                  placeholder="Content body text..."
-                  value={newContent.body}
-                  onChange={(e) => setNewContent({ ...newContent, body: e.target.value })}
-                  className="bg-card border-border min-h-[120px]"
-                />
-              </div>
-
-              {/* Image Upload */}
-              <div className="space-y-2">
-                <Label className="text-foreground">Image (optional)</Label>
-                <div
-                  className={`
-                    border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors
-                    ${dragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}
-                    ${newContent.imageUrl ? "bg-secondary/30" : ""}
-                  `}
-                  onDragEnter={handleDrag}
-                  onDragLeave={handleDrag}
-                  onDragOver={handleDrag}
-                  onDrop={handleDrop}
-                  onClick={handleFileSelect}
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleFileChange}
+                  <Label htmlFor="content-body" className="text-foreground">
+                    Body
+                  </Label>
+                  <Textarea
+                    id="content-body"
+                    placeholder="Describe this content block..."
+                    value={formState.body}
+                    onChange={(event) =>
+                      setFormState((current) => ({
+                        ...current,
+                        body: event.target.value,
+                      }))
+                    }
+                    className="bg-card border-border min-h-[120px]"
                   />
-                  {newContent.imageUrl ? (
+                </div>
+
+                <div className="rounded-lg border border-border p-4 space-y-4">
+                  <div>
+                    <h3 className="text-sm font-medium text-foreground">Contact Details</h3>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Optional fields for contact-style content blocks.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <ImageIcon className="w-8 h-8 mx-auto text-primary" />
-                      <p className="text-sm text-foreground">Image selected</p>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setNewContent({ ...newContent, imageUrl: "" })
-                        }}
-                      >
-                        Remove
-                      </Button>
+                      <Label htmlFor="contact-email">Email</Label>
+                      <Input
+                        id="contact-email"
+                        type="email"
+                        value={formState.contactInfo.email || ""}
+                        onChange={(event) =>
+                          setContactField("email", event.target.value)
+                        }
+                        className="bg-card border-border"
+                      />
                     </div>
-                  ) : (
                     <div className="space-y-2">
-                      <Upload className="w-8 h-8 mx-auto text-muted-foreground" />
+                      <Label htmlFor="contact-phone">Phone</Label>
+                      <Input
+                        id="contact-phone"
+                        value={formState.contactInfo.phone || ""}
+                        onChange={(event) =>
+                          setContactField("phone", event.target.value)
+                        }
+                        className="bg-card border-border"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="contact-website">Website</Label>
+                      <Input
+                        id="contact-website"
+                        value={formState.contactInfo.website || ""}
+                        onChange={(event) =>
+                          setContactField("website", event.target.value)
+                        }
+                        className="bg-card border-border"
+                      />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="contact-address">Address</Label>
+                      <Input
+                        id="contact-address"
+                        value={formState.contactInfo.address || ""}
+                        onChange={(event) =>
+                          setContactField("address", event.target.value)
+                        }
+                        className="bg-card border-border"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-foreground">Images</Label>
+                  <button
+                    type="button"
+                    className="w-full rounded-lg border-2 border-dashed border-border px-4 py-6 text-left transition-colors hover:border-primary/50 hover:bg-primary/5"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={handleFileChange}
+                    />
+                    <div className="flex items-start gap-3">
+                      <Upload className="w-5 h-5 text-muted-foreground mt-0.5" />
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-foreground">
+                          {selectedFiles.length > 0
+                            ? `${selectedFiles.length} file(s) selected`
+                            : "Upload content images"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          PNG, JPG, or WEBP up to 5 MB each.
+                        </p>
+                        {selectedFiles.length > 0 ? (
+                          <div className="pt-2 space-y-1">
+                            {selectedFiles.map((file) => (
+                              <p
+                                key={`${file.name}-${file.lastModified}`}
+                                className="text-xs text-muted-foreground"
+                              >
+                                {file.name}
+                              </p>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
+                {editingContent ? (
+                  <div className="flex items-center justify-between rounded-lg border border-border p-4">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="replace-images" className="text-foreground">
+                        Replace Existing Images
+                      </Label>
                       <p className="text-sm text-muted-foreground">
-                        Drag & drop an image here, or click to select
+                        Turn this on to replace old media instead of appending new uploads.
                       </p>
                     </div>
-                  )}
-                </div>
-              </div>
+                    <Switch
+                      id="replace-images"
+                      checked={replaceImages}
+                      onCheckedChange={setReplaceImages}
+                    />
+                  </div>
+                ) : null}
 
-              {/* Published Toggle */}
-              <div className="flex items-center justify-between rounded-lg border border-border p-4">
-                <div className="space-y-0.5">
-                  <Label htmlFor="published-toggle" className="text-foreground">Published</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Make this content visible on the website
-                  </p>
+                <div className="flex items-center justify-between rounded-lg border border-border p-4">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="published-toggle" className="text-foreground">
+                      Published
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Make this content visible to users immediately.
+                    </p>
+                  </div>
+                  <Switch
+                    id="published-toggle"
+                    checked={formState.isPublished}
+                    onCheckedChange={(checked) =>
+                      setFormState((current) => ({
+                        ...current,
+                        isPublished: checked,
+                      }))
+                    }
+                  />
                 </div>
-                <Switch
-                  id="published-toggle"
-                  checked={newContent.isPublished}
-                  onCheckedChange={(checked) => setNewContent({ ...newContent, isPublished: checked })}
-                />
               </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleAddContent} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                Add Content
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button variant="outline" onClick={resetDialog} disabled={isSubmitting}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => void handleSubmit()}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? <Spinner className="mr-2" /> : null}
+                  {editingContent ? "Save Changes" : "Add Content"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
-      {/* Stats */}
+      {error ? (
+        <Alert variant="destructive">
+          <AlertTitle>Couldn&apos;t load content</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-card border-border/50">
           <CardHeader className="pb-2">
@@ -339,7 +566,7 @@ export function CenterContentView() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-semibold text-emerald-600">
-              {content.filter((c) => c.isPublished).length}
+              {content.filter((item) => item.isPublished).length}
             </p>
           </CardContent>
         </Card>
@@ -349,7 +576,7 @@ export function CenterContentView() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-semibold text-amber-600">
-              {content.filter((c) => !c.isPublished).length}
+              {content.filter((item) => !item.isPublished).length}
             </p>
           </CardContent>
         </Card>
@@ -359,104 +586,148 @@ export function CenterContentView() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-semibold text-primary">
-              {content.filter((c) => c.imageUrl).length}
+              {content.filter((item) => item.images.length > 0).length}
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Content Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {content.map((block) => (
-          <Card key={block.id} className="bg-card border-border/50 overflow-hidden group">
-            {/* Image Preview */}
-            {block.imageUrl && (
-              <div className="aspect-video bg-secondary/30 relative overflow-hidden">
-                <NextImage
-                  src={block.imageUrl}
-                  alt={block.title}
-                  fill
-                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                  className="object-cover"
-                />
-              </div>
-            )}
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="space-y-1 flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="outline" className={`capitalize text-xs ${typeColors[block.type]}`}>
-                      {block.type}
-                    </Badge>
-                    <Badge
-                      variant="outline"
-                      className={
-                        block.isPublished
-                          ? "bg-emerald-100 text-emerald-700 border-emerald-200"
-                          : "bg-secondary text-muted-foreground border-border"
-                      }
-                    >
-                      {block.isPublished ? "Published" : "Draft"}
-                    </Badge>
-                  </div>
-                  <CardTitle className="text-base font-medium text-foreground truncate">
-                    {block.title}
-                  </CardTitle>
-                  <CardDescription className="text-xs font-mono">
-                    {block.key}
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
-                {block.body}
-              </p>
-
-              {/* Actions */}
-              <div className="flex items-center justify-between pt-2 border-t border-border">
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={block.isPublished}
-                    onCheckedChange={() => handleTogglePublish(block.id)}
-                    className="data-[state=checked]:bg-emerald-600"
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    {block.isPublished ? "Published" : "Draft"}
-                  </span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-muted-foreground hover:text-destructive"
-                  onClick={() => handleDelete(block.id)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Empty State */}
-      {content.length === 0 && (
+      {isLoading ? (
+        <div className="py-16 flex items-center justify-center">
+          <Spinner className="text-primary" />
+        </div>
+      ) : content.length === 0 ? (
         <Card className="bg-card border-border/50">
-          <CardContent className="py-16 text-center">
-            <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-            <h3 className="text-lg font-medium text-foreground mb-2">No content yet</h3>
-            <p className="text-muted-foreground mb-4">
-              Start creating content blocks for your website
-            </p>
-            <Button
-              onClick={() => setIsDialogOpen(true)}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Your First Content
-            </Button>
+          <CardContent className="py-16">
+            <Empty className="border-border/60">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <FileText className="size-5" />
+                </EmptyMedia>
+                <EmptyTitle>No content yet</EmptyTitle>
+                <EmptyDescription>
+                  Create the first content block that will feed the user-facing portal.
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button onClick={openCreateDialog} className="gap-2">
+                  <Plus className="w-4 h-4" />
+                  Add Content
+                </Button>
+              </EmptyContent>
+            </Empty>
           </CardContent>
         </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {content.map((item) => {
+            const imageUrl = getPrimaryContentImage(item)
+            const isDeleting = deletingContentId === item._id
+            const isToggling = togglingContentId === item._id
+
+            return (
+              <Card
+                key={item._id}
+                className="bg-card border-border/50 overflow-hidden group"
+              >
+                {imageUrl ? (
+                  <div className="aspect-video bg-secondary/30 relative overflow-hidden">
+                    <NextImage
+                      src={imageUrl}
+                      alt={item.title || item.key}
+                      fill
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                      className="object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="aspect-video bg-secondary/30 flex items-center justify-center">
+                    <ImageIcon className="w-8 h-8 text-muted-foreground/60" />
+                  </div>
+                )}
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-1 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge
+                          variant="outline"
+                          className={`capitalize text-xs ${contentTypeClasses[item.type]}`}
+                        >
+                          {item.type}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={
+                            item.isPublished
+                              ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+                              : "bg-secondary text-muted-foreground border-border"
+                          }
+                        >
+                          {item.isPublished ? "Published" : "Draft"}
+                        </Badge>
+                      </div>
+                      <CardTitle className="text-base font-medium text-foreground truncate">
+                        {item.title || item.key}
+                      </CardTitle>
+                      <CardDescription className="text-xs font-mono">
+                        {item.key}
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed min-h-[60px]">
+                    {item.body || "No body copy has been added yet."}
+                  </p>
+
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{item.images.length} image(s)</span>
+                    {hasContactInfo(item.contactInfo) ? <span>Contact details added</span> : null}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-border">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={item.isPublished}
+                        onCheckedChange={(checked) =>
+                          void handleTogglePublish(item, checked)
+                        }
+                        disabled={isToggling}
+                        className="data-[state=checked]:bg-emerald-600"
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {isToggling
+                          ? "Saving..."
+                          : item.isPublished
+                            ? "Published"
+                            : "Draft"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-foreground"
+                        onClick={() => openEditDialog(item)}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={() => void handleDelete(item)}
+                        disabled={isDeleting}
+                      >
+                        {isDeleting ? <Spinner /> : <Trash2 className="w-4 h-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
       )}
     </div>
   )

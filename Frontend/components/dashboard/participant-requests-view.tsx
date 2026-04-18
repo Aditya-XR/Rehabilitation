@@ -1,13 +1,24 @@
 "use client"
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { CheckCircle, Clock, FileText, RefreshCcw, User, XCircle } from "lucide-react"
+
+import { bookingsApi, type ApiBooking } from "@/lib/api"
+import { BOOKING_STATUS, type BookingStatus } from "@/lib/constants"
+import {
+  bookingStatusClasses,
+  formatShortDateLabel,
+  formatSlotTimeRange,
+  getInitials,
+  getLatestReviewNote,
+} from "@/lib/dashboard"
+import { getRequestErrorMessage } from "@/lib/request"
+import { toast } from "@/hooks/use-toast"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
   DialogContent,
@@ -16,333 +27,353 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Clock, User, FileText, CheckCircle, XCircle } from "lucide-react"
-import { BOOKING_STATUS, type BookingStatus } from "@/lib/constants"
-
-interface Booking {
-  id: string
-  participantName: string
-  participantEmail: string
-  participantAvatar?: string
-  sessionDate: string
-  sessionTime: string
-  notes: string
-  status: BookingStatus
-  adminNotes?: string
-}
-
-// Mock data
-const initialBookings: Booking[] = [
-  {
-    id: "1",
-    participantName: "Maya Chen",
-    participantEmail: "maya@example.com",
-    sessionDate: "2026-04-15",
-    sessionTime: "09:00 - 10:00",
-    notes: "Looking for guidance on mindfulness practices for anxiety management. First time at the center.",
-    status: "pending",
-  },
-  {
-    id: "2",
-    participantName: "James Wilson",
-    participantEmail: "james@example.com",
-    sessionDate: "2026-04-15",
-    sessionTime: "10:30 - 11:30",
-    notes: "Interested in couples intimacy coaching. My partner and I have been struggling with communication.",
-    status: "pending",
-  },
-  {
-    id: "3",
-    participantName: "Sarah Thompson",
-    participantEmail: "sarah@example.com",
-    sessionDate: "2026-04-16",
-    sessionTime: "14:00 - 15:00",
-    notes: "Continuing my meditation journey. This will be my 4th session.",
-    status: "approved",
-    adminNotes: "Returning participant, excellent progress in previous sessions.",
-  },
-  {
-    id: "4",
-    participantName: "David Park",
-    participantEmail: "david@example.com",
-    sessionDate: "2026-04-14",
-    sessionTime: "11:00 - 12:00",
-    notes: "Need help with stress from work.",
-    status: "rejected",
-    adminNotes: "Session time conflict. Suggested alternative times via email.",
-  },
-]
-
-const statusColors: Record<BookingStatus, string> = {
-  pending: "bg-amber-100 text-amber-700 border-amber-200",
-  approved: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  rejected: "bg-destructive/10 text-destructive border-destructive/20",
-}
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty"
+import { Label } from "@/components/ui/label"
+import { Spinner } from "@/components/ui/spinner"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Textarea } from "@/components/ui/textarea"
 
 export function ParticipantRequestsView() {
-  const [bookings, setBookings] = useState<Booking[]>(initialBookings)
-  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
-  const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false)
+  const [bookings, setBookings] = useState<ApiBooking[]>([])
+  const [activeTab, setActiveTab] = useState<BookingStatus>(BOOKING_STATUS.PENDING)
+  const [selectedBooking, setSelectedBooking] = useState<ApiBooking | null>(null)
   const [adminNotes, setAdminNotes] = useState("")
-  const [activeTab, setActiveTab] = useState<BookingStatus>("pending")
+  const [isLoading, setIsLoading] = useState(true)
+  const [isReviewing, setIsReviewing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
 
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2)
-  }
+  const loadBookings = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      const response = await bookingsApi.listAdmin({ limit: 100 })
+      setBookings(response.items)
+      setError(null)
+    } catch (error) {
+      setError(getRequestErrorMessage(error, "Unable to load booking requests."))
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr)
-    return date.toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    })
-  }
+  useEffect(() => {
+    void loadBookings()
+  }, [loadBookings])
 
-  const handleReview = (booking: Booking) => {
+  const counts = useMemo(
+    () => ({
+      pending: bookings.filter((booking) => booking.status === BOOKING_STATUS.PENDING).length,
+      approved: bookings.filter((booking) => booking.status === BOOKING_STATUS.APPROVED).length,
+      rejected: bookings.filter((booking) => booking.status === BOOKING_STATUS.REJECTED).length,
+    }),
+    [bookings],
+  )
+
+  const filteredBookings = useMemo(
+    () => bookings.filter((booking) => booking.status === activeTab),
+    [activeTab, bookings],
+  )
+
+  const openReviewDialog = (booking: ApiBooking) => {
     setSelectedBooking(booking)
-    setAdminNotes(booking.adminNotes || "")
-    setIsReviewDialogOpen(true)
+    setAdminNotes(getLatestReviewNote(booking))
+    setIsDialogOpen(true)
   }
 
-  const handleAction = (action: "approve" | "reject") => {
-    if (!selectedBooking) return
-
-    setBookings(
-      bookings.map((b) =>
-        b.id === selectedBooking.id
-          ? {
-              ...b,
-              status: action === "approve" ? "approved" : "rejected",
-              adminNotes,
-            }
-          : b
-      )
-    )
-    setIsReviewDialogOpen(false)
+  const resetDialog = () => {
     setSelectedBooking(null)
     setAdminNotes("")
+    setIsDialogOpen(false)
   }
 
-  const filteredBookings = bookings.filter((b) => b.status === activeTab)
+  const handleReview = async (action: "approve" | "reject") => {
+    if (!selectedBooking) {
+      return
+    }
 
-  const getCounts = () => ({
-    pending: bookings.filter((b) => b.status === "pending").length,
-    approved: bookings.filter((b) => b.status === "approved").length,
-    rejected: bookings.filter((b) => b.status === "rejected").length,
-  })
+    try {
+      setIsReviewing(true)
+      const response = await bookingsApi.review(selectedBooking._id, {
+        action,
+        notes: adminNotes || undefined,
+      })
 
-  const counts = getCounts()
+      setBookings((current) =>
+        current.map((booking) =>
+          booking._id === selectedBooking._id ? response.booking : booking,
+        ),
+      )
+      setError(null)
+      toast({
+        title: action === "approve" ? "Booking approved" : "Booking rejected",
+        description: `${selectedBooking.user.name}'s request has been reviewed.`,
+      })
+      resetDialog()
+    } catch (error) {
+      toast({
+        title: "Review failed",
+        description: getRequestErrorMessage(error, "Unable to review this booking."),
+        variant: "destructive",
+      })
+    } finally {
+      setIsReviewing(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl font-serif font-semibold text-foreground tracking-wide">
-          Participant Requests
-        </h2>
-        <p className="text-muted-foreground mt-1">
-          Review and manage session booking requests
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-serif font-semibold text-foreground tracking-wide">
+            Participant Requests
+          </h2>
+          <p className="text-muted-foreground mt-1">
+            Review and manage user booking requests in real time
+          </p>
+        </div>
+        <Button variant="outline" className="gap-2" onClick={() => void loadBookings()}>
+          <RefreshCcw className="w-4 h-4" />
+          Refresh
+        </Button>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as BookingStatus)}>
+      {error ? (
+        <Alert variant="destructive">
+          <AlertTitle>Couldn&apos;t load requests</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as BookingStatus)}>
         <TabsList className="bg-secondary/50">
           <TabsTrigger
-            value="pending"
+            value={BOOKING_STATUS.PENDING}
             className="data-[state=active]:bg-amber-100 data-[state=active]:text-amber-700 gap-2"
           >
             Pending
-            {counts.pending > 0 && (
+            {counts.pending > 0 ? (
               <Badge variant="secondary" className="bg-amber-200 text-amber-800 text-xs">
                 {counts.pending}
               </Badge>
-            )}
+            ) : null}
           </TabsTrigger>
           <TabsTrigger
-            value="approved"
+            value={BOOKING_STATUS.APPROVED}
             className="data-[state=active]:bg-emerald-100 data-[state=active]:text-emerald-700 gap-2"
           >
             Approved
-            {counts.approved > 0 && (
+            {counts.approved > 0 ? (
               <Badge variant="secondary" className="bg-emerald-200 text-emerald-800 text-xs">
                 {counts.approved}
               </Badge>
-            )}
+            ) : null}
           </TabsTrigger>
           <TabsTrigger
-            value="rejected"
+            value={BOOKING_STATUS.REJECTED}
             className="data-[state=active]:bg-destructive/10 data-[state=active]:text-destructive gap-2"
           >
             Rejected
-            {counts.rejected > 0 && (
+            {counts.rejected > 0 ? (
               <Badge variant="secondary" className="bg-destructive/20 text-destructive text-xs">
                 {counts.rejected}
               </Badge>
-            )}
+            ) : null}
           </TabsTrigger>
         </TabsList>
 
         {Object.values(BOOKING_STATUS).map((status) => (
           <TabsContent key={status} value={status} className="mt-6">
-            {filteredBookings.length === 0 ? (
+            {isLoading ? (
+              <div className="py-16 flex items-center justify-center">
+                <Spinner className="text-primary" />
+              </div>
+            ) : filteredBookings.length === 0 ? (
               <Card className="bg-card border-border/50">
-                <CardContent className="py-12 text-center">
-                  <p className="text-muted-foreground">
-                    No {status} requests at the moment
-                  </p>
+                <CardContent className="py-12">
+                  <Empty className="border-border/60">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <FileText className="size-5" />
+                      </EmptyMedia>
+                      <EmptyTitle>No {status} requests</EmptyTitle>
+                      <EmptyDescription>
+                        Booking requests will appear here as users reserve session slots.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
                 </CardContent>
               </Card>
             ) : (
               <div className="grid gap-4 md:grid-cols-2">
-                {filteredBookings.map((booking) => (
-                  <Card key={booking.id} className="bg-card border-border/50 hover:shadow-md transition-shadow">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-10 w-10 border border-border">
-                            <AvatarImage src={booking.participantAvatar} />
-                            <AvatarFallback className="bg-primary/10 text-primary text-sm">
-                              {getInitials(booking.participantName)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <CardTitle className="text-base font-medium text-foreground">
-                              {booking.participantName}
-                            </CardTitle>
-                            <CardDescription className="text-xs">
-                              {booking.participantEmail}
-                            </CardDescription>
+                {filteredBookings.map((booking) => {
+                  const reviewNote = getLatestReviewNote(booking)
+
+                  return (
+                    <Card
+                      key={booking._id}
+                      className="bg-card border-border/50 hover:shadow-md transition-shadow"
+                    >
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-10 w-10 border border-border">
+                              <AvatarImage
+                                src={booking.user.avatar}
+                                alt={booking.user.name}
+                              />
+                              <AvatarFallback className="bg-primary/10 text-primary text-sm">
+                                {getInitials(booking.user.name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <CardTitle className="text-base font-medium text-foreground">
+                                {booking.user.name}
+                              </CardTitle>
+                              <CardDescription className="text-xs">
+                                {booking.user.email}
+                              </CardDescription>
+                            </div>
                           </div>
+                          <Badge
+                            variant="outline"
+                            className={`capitalize ${bookingStatusClasses[booking.status]}`}
+                          >
+                            {booking.status}
+                          </Badge>
                         </div>
-                        <Badge
-                          variant="outline"
-                          className={`capitalize ${statusColors[booking.status]}`}
-                        >
-                          {booking.status}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {/* Session Time */}
-                      <div className="flex items-center gap-2 text-sm">
-                        <Clock className="w-4 h-4 text-primary" />
-                        <span className="text-foreground">
-                          {formatDate(booking.sessionDate)} at {booking.sessionTime}
-                        </span>
-                      </div>
-
-                      {/* Notes */}
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <FileText className="w-4 h-4" />
-                          <span>Participant Notes</span>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex items-center gap-2 text-sm">
+                          <Clock className="w-4 h-4 text-primary" />
+                          <span className="text-foreground">
+                            {formatShortDateLabel(booking.slot.date)} at{" "}
+                            {formatSlotTimeRange(booking.slot)}
+                          </span>
                         </div>
-                        <p className="text-sm text-foreground bg-secondary/30 rounded-lg p-3 leading-relaxed">
-                          {booking.notes}
-                        </p>
-                      </div>
 
-                      {/* Admin Notes (if exists) */}
-                      {booking.adminNotes && (
                         <div className="space-y-1">
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <User className="w-4 h-4" />
-                            <span>Admin Notes</span>
+                            <FileText className="w-4 h-4" />
+                            <span>User Notes</span>
                           </div>
-                          <p className="text-sm text-foreground bg-primary/5 rounded-lg p-3 leading-relaxed">
-                            {booking.adminNotes}
+                          <p className="text-sm text-foreground bg-secondary/30 rounded-lg p-3 leading-relaxed min-h-16">
+                            {booking.notes || "No notes were provided with this request."}
                           </p>
                         </div>
-                      )}
 
-                      {/* Review Button (only for pending) */}
-                      {booking.status === "pending" && (
-                        <Button
-                          variant="outline"
-                          className="w-full mt-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground"
-                          onClick={() => handleReview(booking)}
-                        >
-                          Review Request
-                        </Button>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
+                        {reviewNote ? (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <User className="w-4 h-4" />
+                              <span>Admin Notes</span>
+                            </div>
+                            <p className="text-sm text-foreground bg-primary/5 rounded-lg p-3 leading-relaxed">
+                              {reviewNote}
+                            </p>
+                          </div>
+                        ) : null}
+
+                        {booking.status === BOOKING_STATUS.PENDING ? (
+                          <Button
+                            variant="outline"
+                            className="w-full mt-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+                            onClick={() => openReviewDialog(booking)}
+                          >
+                            Review Request
+                          </Button>
+                        ) : null}
+                      </CardContent>
+                    </Card>
+                  )
+                })}
               </div>
             )}
           </TabsContent>
         ))}
       </Tabs>
 
-      {/* Review Dialog */}
-      <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
+      <Dialog
+        open={isDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            resetDialog()
+            return
+          }
+
+          setIsDialogOpen(true)
+        }}
+      >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-serif text-foreground">
               Review Request
             </DialogTitle>
             <DialogDescription>
-              Review {selectedBooking?.participantName}&apos;s session request
+              Review {selectedBooking?.user.name}&apos;s booking request.
             </DialogDescription>
           </DialogHeader>
 
-          {selectedBooking && (
+          {selectedBooking ? (
             <div className="space-y-4 py-4">
-              {/* Request Summary */}
               <div className="bg-secondary/30 rounded-lg p-4 space-y-2">
                 <div className="flex items-center gap-2">
                   <Avatar className="h-8 w-8">
                     <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                      {getInitials(selectedBooking.participantName)}
+                      {getInitials(selectedBooking.user.name)}
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="font-medium text-foreground">{selectedBooking.participantName}</p>
+                    <p className="font-medium text-foreground">
+                      {selectedBooking.user.name}
+                    </p>
                     <p className="text-xs text-muted-foreground">
-                      {formatDate(selectedBooking.sessionDate)} at {selectedBooking.sessionTime}
+                      {formatShortDateLabel(selectedBooking.slot.date)} at{" "}
+                      {formatSlotTimeRange(selectedBooking.slot)}
                     </p>
                   </div>
                 </div>
-                <p className="text-sm text-foreground mt-2">{selectedBooking.notes}</p>
+                <p className="text-sm text-foreground mt-2">
+                  {selectedBooking.notes || "No notes were provided with this request."}
+                </p>
               </div>
 
-              {/* Admin Notes */}
               <div className="space-y-2">
                 <Label htmlFor="admin-notes" className="text-foreground">
-                  Admin Notes (optional)
+                  Admin Notes
                 </Label>
                 <Textarea
                   id="admin-notes"
-                  placeholder="Add any notes about this request..."
+                  placeholder="Add context for the participant or your team..."
                   value={adminNotes}
-                  onChange={(e) => setAdminNotes(e.target.value)}
+                  onChange={(event) => setAdminNotes(event.target.value)}
                   className="bg-card border-border min-h-[100px]"
                 />
               </div>
             </div>
-          )}
+          ) : null}
 
           <DialogFooter className="flex gap-2 sm:gap-2">
             <Button
               variant="outline"
               className="flex-1 border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground gap-2"
-              onClick={() => handleAction("reject")}
+              onClick={() => void handleReview("reject")}
+              disabled={isReviewing}
             >
-              <XCircle className="w-4 h-4" />
+              {isReviewing ? <Spinner className="mr-1" /> : <XCircle className="w-4 h-4" />}
               Reject
             </Button>
             <Button
               className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-              onClick={() => handleAction("approve")}
+              onClick={() => void handleReview("approve")}
+              disabled={isReviewing}
             >
-              <CheckCircle className="w-4 h-4" />
+              {isReviewing ? <Spinner className="mr-1" /> : <CheckCircle className="w-4 h-4" />}
               Approve
             </Button>
           </DialogFooter>

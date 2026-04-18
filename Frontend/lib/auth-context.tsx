@@ -11,7 +11,7 @@ import {
 
 import { authApi, ApiClientError, type ApiUser } from "@/lib/api"
 
-interface User {
+export interface User {
   id: string
   name: string
   email: string
@@ -30,6 +30,8 @@ interface AuthContextType {
   signup: (name: string, email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   googleLogin: () => Promise<void>
+  syncUser: (user: ApiUser) => void
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -63,6 +65,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearAuthMessages = useCallback(() => {
     setAuthError(null)
     setAuthNotice(null)
+  }, [])
+
+  const syncUser = useCallback((apiUser: ApiUser) => {
+    setUser(mapApiUserToUser(apiUser))
+  }, [])
+
+  const refreshUser = useCallback(async () => {
+    const currentUser = await authApi.getCurrentUser()
+    setUser(mapApiUserToUser(currentUser.user))
   }, [])
 
   const restoreSession = useCallback(async () => {
@@ -158,8 +169,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearAuthMessages,
         login,
         signup,
-        logout,
         googleLogin,
+        logout,
+        syncUser,
+        refreshUser,
       }}
     >
       {children}

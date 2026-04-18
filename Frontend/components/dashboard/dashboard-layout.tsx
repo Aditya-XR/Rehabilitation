@@ -1,46 +1,42 @@
 "use client"
 
 import { useState } from "react"
+import type { LucideIcon } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { getInitials } from "@/lib/dashboard"
 import { cn } from "@/lib/utils"
 import {
-  Calendar,
-  Users,
-  FileText,
   LogOut,
   Leaf,
   Menu,
   X,
 } from "lucide-react"
 
-export type DashboardView = "slots" | "bookings" | "content"
-
-interface DashboardLayoutProps {
-  children: React.ReactNode
-  activeView: DashboardView
-  onViewChange: (view: DashboardView) => void
+export interface PortalNavItem<TView extends string = string> {
+  id: TView
+  label: string
+  icon: LucideIcon
 }
 
-const navItems = [
-  { id: "slots" as const, label: "Session Slots", icon: Calendar },
-  { id: "bookings" as const, label: "Participant Requests", icon: Users },
-  { id: "content" as const, label: "Center Content", icon: FileText },
-]
+interface DashboardLayoutProps<TView extends string> {
+  children: React.ReactNode
+  activeView: TView
+  onViewChange: (view: TView) => void
+  navItems: PortalNavItem<TView>[]
+  portalLabel: string
+}
 
-export function DashboardLayout({ children, activeView, onViewChange }: DashboardLayoutProps) {
+export function DashboardLayout<TView extends string>({
+  children,
+  activeView,
+  onViewChange,
+  navItems,
+  portalLabel,
+}: DashboardLayoutProps<TView>) {
   const { user, logout } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2)
-  }
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -69,7 +65,7 @@ export function DashboardLayout({ children, activeView, onViewChange }: Dashboar
               <h1 className="font-serif text-lg font-semibold text-sidebar-foreground tracking-wide">
                 Serenity Center
               </h1>
-              <p className="text-xs text-muted-foreground">Admin Portal</p>
+              <p className="text-xs text-muted-foreground">{portalLabel}</p>
             </div>
           </div>
         </div>
