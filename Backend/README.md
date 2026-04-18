@@ -86,8 +86,8 @@ Server is running on port 5000
 
 - Access and refresh tokens are stored in HttpOnly cookies.
 - Protected routes also accept `Authorization: Bearer <accessToken>`.
-- Local signup creates an unverified user.
-- Local login is blocked until email verification succeeds.
+- Auth endpoints behind `authRateLimiter` are limited to 20 requests per 15 minutes per client/IP.
+- Local signup currently creates a verified user immediately.
 - Google sign-in marks the user as verified automatically.
 - Admin routes require both authentication and `role = admin`.
 
@@ -189,7 +189,7 @@ Response example:
 
 ### POST `/auth/signup`
 
-Creates a local user account and sends a verification email.
+Creates a local user account.
 
 Request body:
 
@@ -214,20 +214,24 @@ Success response:
       "googleId": null,
       "avatar": "",
       "role": "user",
-      "isEmailVerified": false,
+      "isEmailVerified": true,
       "isActive": true,
       "createdAt": "2026-04-06T10:00:00.000Z",
       "updatedAt": "2026-04-06T10:00:00.000Z"
     }
   },
-  "message": "User registered successfully. Please verify your email to log in.",
+  "message": "User registered successfully.",
   "success": true
 }
 ```
 
 ### POST `/auth/verify-email`
 
-Verifies a local account using the token sent by email.
+Verifies an account using a previously issued verification token.
+
+Note:
+
+- The current `POST /auth/signup` flow already marks the user as verified, so this endpoint is only useful if your app creates verification tokens separately.
 
 Request body:
 
@@ -250,7 +254,7 @@ Success response:
 
 ### POST `/auth/login`
 
-Logs in a verified local account and sets auth cookies.
+Logs in a local account and sets auth cookies.
 
 Request body:
 
@@ -323,7 +327,7 @@ Success response:
 
 ### POST `/auth/forgot-password`
 
-Generates a password reset token and sends a reset email.
+Generates a password reset token and sends a reset email for an existing local-password user.
 
 Request body:
 
@@ -343,6 +347,11 @@ Success response:
   "success": true
 }
 ```
+
+Error cases:
+
+- returns `404` if the email does not exist
+- returns `400` for Google-only accounts
 
 ### POST `/auth/reset-password/:token`
 
@@ -1232,20 +1241,21 @@ Response example:
 ## Suggested Postman Flow
 
 1. `POST /auth/signup`
-2. `POST /auth/verify-email`
-3. `POST /auth/login`
-4. `GET /auth/me`
-5. `POST /admin/slots` as admin
-6. `GET /slots/available`
-7. `POST /bookings/request`
-8. `GET /bookings/my`
-9. `GET /admin/bookings` as admin
-10. `PUT /admin/bookings/:id`
-11. `POST /admin/content`
-12. `GET /content`
+2. `POST /auth/login`
+3. `GET /auth/me`
+4. `POST /admin/slots` as admin
+5. `GET /slots/available`
+6. `POST /bookings/request`
+7. `GET /bookings/my`
+8. `GET /admin/bookings` as admin
+9. `PUT /admin/bookings/:id`
+10. `POST /admin/content`
+11. `GET /content`
 
 ## Notes
 
 - Email and password reset links depend on `FRONTEND_URL`.
 - Auth cookies are the preferred session mechanism.
 - If Cloudinary or SMTP is not configured, image uploads or email delivery will not complete successfully.
+- Required env vars at startup are `MONGODB_URI`, `ACCESS_TOKEN_SECRET`, and `REFRESH_TOKEN_SECRET`.
+- `CORS_ORIGIN` can be a single origin, a comma-separated list, or `*`.
