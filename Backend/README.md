@@ -327,7 +327,9 @@ Success response:
 
 ### POST `/auth/forgot-password`
 
-Generates a password reset token and sends a reset email for an existing local-password user.
+Generates a password reset token and sends a reset email for an active account that has a password.
+
+The response is always the same `200`, so it does not reveal whether an email is registered. Unknown emails, Google-only accounts and deactivated accounts get that response without a token or an email.
 
 Request body:
 
@@ -347,11 +349,6 @@ Success response:
   "success": true
 }
 ```
-
-Error cases:
-
-- returns `404` if the email does not exist
-- returns `400` for Google-only accounts
 
 ### POST `/auth/reset-password/:token`
 
@@ -878,7 +875,23 @@ Rules:
 
 - `status` can only be `available` or `cancelled`
 - `startTime` and `endTime` must be `HH:mm`
+- `endTime` must be after `startTime`
 - duplicate date/time slots are rejected
+
+Validation error example (end time before start time):
+
+```json
+{
+  "success": false,
+  "message": "Validation failed",
+  "errors": [
+    {
+      "field": "endTime",
+      "message": "End time must be after start time"
+    }
+  ]
+}
+```
 
 Response example:
 
@@ -906,7 +919,7 @@ Response example:
 
 ### PUT `/admin/slots/:id`
 
-Updates a slot that is still editable.
+Updates a slot that is still editable. The same time rules as creation apply; an end time before the start time returns `400` with a field error on `endTime`.
 
 Editable only when current slot status is:
 
@@ -1222,7 +1235,7 @@ Response example:
 
 - `date` must be a valid date
 - `startTime` and `endTime` must be in `HH:mm`
-- `endTime` must be after `startTime`
+- `endTime` must be after `startTime` (checked on create and update; violations return `400`)
 - slot statuses:
   - `available`
   - `pending`
@@ -1258,4 +1271,5 @@ Response example:
 - Auth cookies are the preferred session mechanism.
 - If Cloudinary or SMTP is not configured, image uploads or email delivery will not complete successfully.
 - Required env vars at startup are `MONGODB_URI`, `ACCESS_TOKEN_SECRET`, and `REFRESH_TOKEN_SECRET`.
+- Databases created by earlier versions have a sparse `users.googleId_1` index that allowed only one email/password account. On startup the server replaces it with a partial unique index and logs `Rebuilt users.googleId_1 as a partial unique index` once; no manual step is needed.
 - `CORS_ORIGIN` can be a single origin, a comma-separated list, or `*`.

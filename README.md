@@ -11,7 +11,7 @@ A full-stack web app that lets a rehabilitation center publish session slots and
 - **Cookie-based JWT sessions with refresh-token rotation.** Login sets an access token and a refresh token (defaults `1h` / `10d`) as `HttpOnly` cookies with configurable `Secure`, `SameSite` and domain. Each refresh issues a new pair and keeps only the latest refresh token on the user record, so a token that has already been rotated out is rejected; logout revokes it server-side. The React client restores the session on load via `/auth/me`, falling back to a silent refresh.
 - **Role-based access control.** `requireAuth` verifies the JWT (cookie or `Authorization: Bearer`) and reloads the user from MongoDB on every authenticated request, rejecting inactive accounts. `requireRole("admin")` guards the whole `/api/v1/admin` router, and a client-side `RoleGuard` sends admins to `/admin` and patients to `/user`.
 - **Request validation and hardening.** Hand-written validators run through a `validateRequest({ body, params, query })` middleware and return field-level `400` errors (email format, password strength, ObjectIds, `HH:mm` times, enums, pagination bounds). The public auth endpoints share a rate limiter (20 requests per 15 minutes per IP), `helmet` sets security headers, CORS uses an origin allow-list, and a central error handler maps duplicate keys to `409`, Mongoose validation/cast errors to `400` and JWT errors to `401`.
-- **Hashed reset tokens and Cloudinary media.** Password-reset tokens are 32 random bytes; only their SHA-256 hash is stored, with a 15-minute expiry. Uploaded images are kept in memory by Multer (images only, 5 MB each) and streamed to Cloudinary.
+- **Password reset and media uploads.** `POST /auth/forgot-password` returns the same response whether or not an email is registered, and only active accounts with a password get a reset token. Tokens are 32 random bytes; only their SHA-256 hash is stored, with a 15-minute expiry. Uploaded images are kept in memory by Multer (images only, 5 MB each) and streamed to Cloudinary.
 
 ## Features
 
@@ -79,7 +79,7 @@ Access levels: **Public** needs no auth; **Rate-limited** is public and shares t
 | POST | `/auth/login` | Rate-limited | Sign in and set the access/refresh cookies |
 | POST | `/auth/google` | Rate-limited | Sign in with a Google ID token |
 | POST | `/auth/verify-email` | Rate-limited | Confirm an email-verification token |
-| POST | `/auth/forgot-password` | Rate-limited | Email a password-reset link |
+| POST | `/auth/forgot-password` | Rate-limited | Email a password-reset link (same response for any email) |
 | POST | `/auth/reset-password/:token` | Rate-limited | Set a new password with a reset token |
 | POST | `/auth/refresh-token` | Refresh cookie | Rotate the token pair |
 | POST | `/auth/logout` | Signed in | Revoke the refresh token and clear cookies |
@@ -110,7 +110,7 @@ Access levels: **Public** needs no auth; **Rate-limited** is public and shares t
 
 | Collection | Key fields | Relations and indexes |
 | --- | --- | --- |
-| `users` | `name`, `email` (unique), `password` (bcrypt hash, excluded from queries by default), `googleId`, `avatar`, `role` (`user` / `admin`), `isActive`, `refreshToken`, hashed reset/verification tokens with expiry | unique `email` |
+| `users` | `name`, `email` (unique), `password` (bcrypt hash, excluded from queries by default), `googleId`, `avatar`, `role` (`user` / `admin`), `isActive`, `refreshToken`, hashed reset/verification tokens with expiry | unique `email`; unique `googleId` when set (partial index) |
 | `slots` | `date`, `startTime` / `endTime` (`HH:mm`), `startsAt` / `endsAt` (computed in a `pre("validate")` hook), `status` (`available` / `pending` / `confirmed` / `cancelled`) | `createdBy` → users; unique (`date`, `startTime`, `endTime`); (`status`, `startsAt`) |
 | `bookings` | `status` (`pending` / `approved` / `rejected`), `notes`, `reviewedAt`, `statusHistory[]` (`from`, `to`, `actor`, `note`, `changedAt`) | `user` → users, `slot` → slots, `reviewedBy` → users; (`user`, `status`, `createdAt`), (`slot`, `createdAt`) |
 | `contents` | `key` (unique), `type` (`hero` / `section` / `facility` / `gallery` / `contact` / `generic`), `title`, `body`, `images[]` (Cloudinary URL, public ID, dimensions, format), `contactInfo`, `isPublished` | (`type`, `isPublished`, `updatedAt`) |
@@ -153,7 +153,7 @@ Configure `.env` from [`Backend/.env.example`](Backend/.env.example):
 - `FRONTEND_URL` is the base URL used in password-reset email links; set it to the same origin.
 - Cloudinary (`CLOUDINARY_*`), SMTP (`SMTP_*`, `MAIL_FROM`) and `GOOGLE_CLIENT_ID` are optional. Without SMTP, emails are skipped with a warning in the log; without Cloudinary, image uploads return an error.
 
-The API listens on `http://localhost:5000` (`PORT`), and `GET /api/v1/status` is a health check.
+The API listens on `http://localhost:5000` (`PORT`), and `GET /api/v1/status` is a health check. If you point it at a database created by an earlier version, startup also replaces the old `users.googleId_1` index, which allowed only one email/password account, with a partial unique index. No manual step is needed.
 
 ### 2. Web client
 
@@ -187,7 +187,7 @@ Rehabilitation/
 │       ├── server.js       connects to MongoDB, then starts the HTTP server
 │       ├── app.js          global middleware; mounts routes at /api/v1
 │       ├── config/         env parsing, Cloudinary and SMTP clients
-│       ├── database/       MongoDB connection
+│       ├── database/       MongoDB connection, startup index repair
 │       ├── routes/         auth, slots, bookings, content, admin
 │       ├── middleware/     auth/role, rate limit, validation, uploads, errors
 │       ├── validations/    request validators per resource
