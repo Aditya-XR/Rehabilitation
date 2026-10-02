@@ -17,8 +17,8 @@ const sourceSans = Source_Sans_3({
 });
 
 export const metadata: Metadata = {
-  title: 'Serenity Center | Meditation & Self-Discovery',
-  description: 'A sanctuary for meditation, intimacy coaching, and self-discovery journeys. Book your session and begin your path to inner peace.',
+  title: 'Serenity Center | Rehabilitation Session Booking',
+  description: 'Book rehabilitation sessions at Serenity Center: browse available slots, request a session and track the status of your bookings.',
   icons: {
     icon: [
       {
