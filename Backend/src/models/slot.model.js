@@ -48,13 +48,18 @@ const slotSchema = new mongoose.Schema(
 slotSchema.index({ date: 1, startTime: 1, endTime: 1 }, { unique: true });
 slotSchema.index({ status: 1, startsAt: 1 });
 
+// Rule violations use this.invalidate() so they surface as a Mongoose ValidationError,
+// which the error handler returns as a 400 with field-level errors (a plain Error became a 500).
 slotSchema.pre("validate", function () {
     if (!this.date || !this.startTime || !this.endTime) {
         return;
     }
 
-    if (!isValidTimeString(this.startTime) || !isValidTimeString(this.endTime)) {
-        throw new Error("Time must be in HH:mm format");
+    const invalidTimePaths = ["startTime", "endTime"].filter((path) => !isValidTimeString(this[path]));
+
+    if (invalidTimePaths.length) {
+        invalidTimePaths.forEach((path) => this.invalidate(path, "Time must be in HH:mm format", this[path]));
+        return;
     }
 
     const normalizedDate = new Date(this.date);
@@ -64,7 +69,7 @@ slotSchema.pre("validate", function () {
     this.endsAt = combineDateAndTime(normalizedDate, this.endTime);
 
     if (this.endsAt <= this.startsAt) {
-        throw new Error("End time must be after start time");
+        this.invalidate("endTime", "End time must be after start time", this.endTime);
     }
 });
 
