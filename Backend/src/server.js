@@ -1,8 +1,10 @@
 import connectDB from "./database/db.js";
+import { repairLegacyGoogleIdIndex } from "./database/indexes.js";
 import { env } from "./config/env.js";
 import app from "./app.js";
 
 connectDB()
+    .then(repairLegacyGoogleIdIndex)
     .then(() => {
         app.listen(env.port, () => {
             console.log(`Server is running on port ${env.port}`);

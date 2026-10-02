@@ -78,7 +78,12 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-userSchema.index({ googleId: 1 }, { unique: true, sparse: true });
+// Only real Google IDs are indexed. A sparse index would still include the explicit null that
+// email/password accounts store, so every account after the first would hit a duplicate-key error.
+userSchema.index(
+  { googleId: 1 },
+  { unique: true, partialFilterExpression: { googleId: { $type: "string" } } }
+);
 userSchema.index({ emailVerificationToken: 1 });
 userSchema.index({ passwordResetToken: 1 });
 
