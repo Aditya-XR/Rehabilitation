@@ -138,7 +138,7 @@ export function UserBookingsView() {
                       </EmptyMedia>
                       <EmptyTitle>No {status} bookings</EmptyTitle>
                       <EmptyDescription>
-                        Your booking requests will show up here  move through review.
+                        Your booking requests will show up here as they move through review.
                       </EmptyDescription>
                     </EmptyHeader>
                   </Empty>

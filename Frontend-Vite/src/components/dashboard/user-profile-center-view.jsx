@@ -290,7 +290,7 @@ export function UserProfileCenterView() {
                         </CardHeader>
                         <CardContent className="space-y-4">
                           <p className="text-sm text-muted-foreground leading-relaxed line-clamp-4 min-h-[84px]">
-                            {item.body || "No body copy h added for this section yet."}
+                            {item.body || "No body copy has been added for this section yet."}
                           </p>
                           {hasContactInfo(item.contactInfo) ? (
                             <div className="space-y-2 text-sm">

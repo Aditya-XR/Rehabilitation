@@ -182,7 +182,7 @@ export function CenterContentView() {
         setContent((current) => sortContent([...current, response.content]))
         toast({
           title: "Content created",
-          description: `${response.content.key} h added successfully.`,
+          description: `${response.content.key} has been added successfully.`,
         })
       }
 
@@ -212,7 +212,7 @@ export function CenterContentView() {
       )
       toast({
         title: checked ? "Content published" : "Content moved to draft",
-        description: `${item.key} w successfully.`,
+        description: `${item.key} was updated successfully.`,
       })
     } catch (error) {
       toast({
@@ -236,7 +236,7 @@ export function CenterContentView() {
       setContent((current) => current.filter((entry) => entry._id !== item._id))
       toast({
         title: "Content deleted",
-        description: `${item.key} w successfully.`,
+        description: `${item.key} was removed successfully.`,
       })
     } catch (error) {
       toast({
@@ -664,7 +664,7 @@ export function CenterContentView() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed min-h-[60px]">
-                    {item.body || "No body copy h added yet."}
+                    {item.body || "No body copy has been added yet."}
                   </p>
 
                   <div className="flex items-center justify-between text-xs text-muted-foreground">

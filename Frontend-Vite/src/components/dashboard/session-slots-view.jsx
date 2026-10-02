@@ -142,14 +142,14 @@ export function SessionSlotsView() {
         )
         toast({
           title: "Slot updated",
-          description: `${formatDateLabel(response.slot.date)} w successfully.`,
+          description: `${formatDateLabel(response.slot.date)} was updated successfully.`,
         })
       } else {
         const response = await slotsApi.create(formState)
         setSlots((current) => sortSlots([...current, response.slot]))
         toast({
           title: "Slot created",
-          description: `${formatDateLabel(response.slot.date)} w to the schedule.`,
+          description: `${formatDateLabel(response.slot.date)} was added to the schedule.`,
         })
       }
 
@@ -186,7 +186,7 @@ export function SessionSlotsView() {
       setSlots((current) => current.filter((item) => item._id !== slot._id))
       toast({
         title: "Slot deleted",
-        description: `${formatDateLabel(slot.date)} w successfully.`,
+        description: `${formatDateLabel(slot.date)} was removed successfully.`,
       })
       setError(null)
     } catch (error) {

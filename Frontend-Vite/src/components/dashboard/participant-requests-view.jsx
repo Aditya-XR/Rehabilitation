@@ -110,7 +110,7 @@ export function ParticipantRequestsView() {
       setError(null)
       toast({
         title: action === "approve" ? "Booking approved" : "Booking rejected",
-        description: `${selectedBooking.user.name}'s request h reviewed.`,
+        description: `${selectedBooking.user.name}'s request has been reviewed.`,
       })
       resetDialog()
     } catch (error) {
@@ -201,7 +201,7 @@ export function ParticipantRequestsView() {
                       </EmptyMedia>
                       <EmptyTitle>No {status} requests</EmptyTitle>
                       <EmptyDescription>
-                        Booking requests will appear here  reserve session slots.
+                        Booking requests will appear here as users reserve session slots.
                       </EmptyDescription>
                     </EmptyHeader>
                   </Empty>

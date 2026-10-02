@@ -75,7 +75,7 @@ export function UserAvailableSlotsView() {
       toast({
         title: "Request submitted",
         description:
-          "Your booking request w to the admin team for review.",
+          "Your booking request was sent to the admin team for review.",
       })
       setSelectedSlot(null)
       setNotes("")
@@ -137,7 +137,7 @@ export function UserAvailableSlotsView() {
                 </EmptyMedia>
                 <EmptyTitle>No available sessions right now</EmptyTitle>
                 <EmptyDescription>
-                  New slots will appear here   admin team publishes availability.
+                  New slots will appear here as soon as the admin team publishes availability.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -196,7 +196,7 @@ export function UserAvailableSlotsView() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="rounded-lg border border-border bg-secondary/30 p-4 text-sm text-foreground">
-              Your request will be marked  until an admin approves or rejects it.
+              Your request will be marked as pending until an admin approves or rejects it.
             </div>
             <div className="space-y-2">
               <Label htmlFor="booking-notes" className="text-foreground">
