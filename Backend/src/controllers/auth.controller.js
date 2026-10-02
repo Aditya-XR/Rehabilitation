@@ -90,8 +90,11 @@ export const verifyEmail = asyncHandler(async (req, res) => {
 });
 
 export const forgotPassword = asyncHandler(async (req, res) => {
-    const { user, resetToken } = await forgotPasswordService(req.body.email);
-    dispatchPasswordResetEmail(user, resetToken);
+    const resetRequest = await forgotPasswordService(req.body.email);
+
+    if (resetRequest) {
+        dispatchPasswordResetEmail(resetRequest.user, resetRequest.resetToken);
+    }
 
     res.status(200).json(
         new ApiResponse(200, null, "If the account exists and supports password login, a reset email has been sent")

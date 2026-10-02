@@ -167,15 +167,14 @@ export const verifyEmail = async (token) => {
     return user.toSafeObject();
 };
 
+// Returns null when no reset email should be sent (unknown email, Google-only or deactivated
+// account). The controller answers identically either way, so the endpoint does not reveal
+// which emails are registered.
 export const forgotPassword = async (email) => {
     const user = await User.findOne({ email }).select("+password");
 
-    if (!user) {
-        throw new ApiError(404, "User not found");
-    }
-
-    if (!user.password) {
-        throw new ApiError(400, "Password reset is not available for Google-only accounts");
+    if (!user || !user.password || !user.isActive) {
+        return null;
     }
 
     const rawResetToken = generateRawToken();
